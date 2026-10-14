@@ -12,3 +12,8 @@ targets/esp32/sdkconfig.cspot-wrover-b
 *.bak
 ClientInfo.h
 client_info.h
+.hori-build/
+dist/
+private-test-results/
+*.credentials
+*.env
