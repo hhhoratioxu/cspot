@@ -142,12 +142,17 @@ int main(int argc, char** argv) {
       { std::ofstream out(file); out << "this is not FLAC"; }
       fails([&] { FlacDecoder d(file); decode(d); });
     } else {
-      unsigned bits = test == "decode24" || test == "pcm24" ? 24 : test == "decode32" ? 32 : 16;
-      unsigned channels = test == "mono" || test == "pcm_mono" ? 1 : 2;
+      unsigned bits = test == "decode24" || test == "pcm24" || test == "tone24" ? 24 : test == "decode32" ? 32 : 16;
+      unsigned channels = test == "unsupported_channels" ? 3 : test == "mono" || test == "pcm_mono" ? 1 : 2;
       unsigned rate = test == "resample96" ? 96000 :
           test == "resample48" || test == "seek_resample" ? 48000 : 44100;
-      Fixture fixture(folder, test, rate, bits, channels, rate != 44100);
-      if (test == "corrupt" || test == "md5") {
+      Fixture fixture(folder, test, rate, bits, channels, rate != 44100 || test == "tone24");
+      if (test == "unsupported_channels") {
+        fails([&] { FlacDecoder d(fixture.path); });
+      } else if (test == "seek_after_eof") {
+        FlacDecoder d(fixture.path); require(decode(d) == fixture.pcm, "full decode before seek");
+        d.seekMs(0); require(decode(d) == fixture.pcm, "seek and restart after EOF");
+      } else if (test == "corrupt" || test == "md5") {
         std::fstream file(fixture.path, std::ios::binary | std::ios::in | std::ios::out);
         file.seekg(test == "md5" ? 26 : std::filesystem::file_size(fixture.path) - 5);
         char byte; file.read(&byte, 1); file.seekp(test == "md5" ? 26 :

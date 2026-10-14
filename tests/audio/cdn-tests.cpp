@@ -187,6 +187,8 @@ int main(int argc, char** argv) {
       require(ov_open_callbacks(&file, &decoder, nullptr, 0, callbacks) == 0, "real Vorbis decode open");
       const auto* info = ov_info(&decoder, -1);
       require(info && info->rate == 44100 && info->channels == 2, "Vorbis output format");
+      require(info->bitrate_nominal == static_cast<long>(std::stoul(test.substr(6)) * 1000),
+              "actual Vorbis header nominal bitrate matches 96/160/320 fixture");
       std::vector<int16_t> pcm; int section = 0; char buffer[4096]; long n;
       while ((n = ov_read(&decoder, buffer, sizeof(buffer), 0, 2, 1, &section)) > 0) {
         const auto* samples = reinterpret_cast<int16_t*>(buffer);

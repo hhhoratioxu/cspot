@@ -5,13 +5,22 @@
 #include <utility>
 
 namespace cspot::audio {
-FlacDecoder::FlacDecoder(const std::string& path) {
+FlacDecoder::FlacDecoder(const std::string& path) : path_(path) {
+  initialize();
+}
+void FlacDecoder::initialize() {
+  format_ = {};
+  block_.clear();
+  error_.clear();
+  finished_ = false;
+  sought_ = false;
+  decodedFrames_ = 0;
   decoder_ = FLAC__stream_decoder_new();
   if (!decoder_) throw std::bad_alloc();
   try {
     FLAC__stream_decoder_set_md5_checking(decoder_, true);
     const auto status = FLAC__stream_decoder_init_file(
-        decoder_, path.c_str(), writeCallback, metadataCallback, errorCallback, this);
+        decoder_, path_.c_str(), writeCallback, metadataCallback, errorCallback, this);
     if (status != FLAC__STREAM_DECODER_INIT_STATUS_OK)
       throw std::runtime_error(FLAC__StreamDecoderInitStatusString[status]);
     if (!FLAC__stream_decoder_process_until_end_of_metadata(decoder_))
@@ -96,7 +105,11 @@ std::vector<std::int32_t> FlacDecoder::nextBlock() {
   return {};
 }
 void FlacDecoder::seekMs(std::uint64_t ms) {
-  if (finished_) throw std::runtime_error("seek after decoder finish: reopen the file");
+  if (finished_) {
+    FLAC__stream_decoder_delete(decoder_);
+    decoder_ = nullptr;
+    initialize();  // Every callback keeps this object's address as client data.
+  }
   if (ms > std::numeric_limits<std::uint64_t>::max() / format_.sampleRate)
     throw std::out_of_range("FLAC seek overflow");
   const auto frame = ms * format_.sampleRate / 1000;

@@ -26,6 +26,7 @@ class FlacDecoder {
   void seekMs(std::uint64_t milliseconds);
  private:
   FLAC__StreamDecoder* decoder_ = nullptr;
+  std::string path_;
   PcmFormat format_;
   std::vector<std::int32_t> block_;
   std::string error_;
@@ -40,5 +41,6 @@ class FlacDecoder {
   static void errorCallback(const FLAC__StreamDecoder*,
                             FLAC__StreamDecoderErrorStatus, void*) noexcept;
   void checkError() const;
+  void initialize();
 };
 }  // namespace cspot::audio

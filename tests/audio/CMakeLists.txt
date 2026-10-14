@@ -33,7 +33,8 @@ add_executable(audio-tests audio-tests.cpp)
 target_link_libraries(audio-tests PRIVATE hori_audio)
 target_compile_options(audio-tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
 foreach(case auto lossless vorbis320 legacy96 legacy160 legacy320 strict320 unknown aac24
-             decode16 decode24 decode32 mono seek malformed missing corrupt truncated md5)
+             decode16 decode24 decode32 mono seek seek_after_eof unsupported_channels tone24
+             malformed missing corrupt truncated md5)
   add_test(NAME ${case} COMMAND audio-tests ${case} ${CMAKE_CURRENT_BINARY_DIR}/fixtures)
 endforeach()
 if(APPLE)

@@ -6,7 +6,9 @@ Local FLAC decoder tests do not prove Spotify lossless access or HomePod playbac
 ## Executed locally / 已执行的本地测试
 
 Apple Silicon arm64, AppleClang 21, libFLAC 1.5.0, macOS AudioToolbox.
-Release: **25/25 PASS**. Debug with address/undefined behavior sanitizers: **25/25 PASS**.
+Initial independent suite: Release **25/25 PASS**, sanitizer **25/25 PASS**.
+The parent bridge suite also exercises actual cspot metadata/HTTP/AES/Vorbis code.
+Current totals and execution records are in the parent fork's `docs/TEST-RESULTS.md`.
 
 Tests generate original, freely distributable PCM and encode it with libFLAC's
 verified encoder. The original PCM is the comparison oracle, not another decode.
@@ -36,7 +38,7 @@ The standalone local decoder deliberately does not implement Spotify DRM or file
 retrieval. CDNAudioFile remains the existing Spotify Vorbis transport, whose 167-byte
 prefix must not be applied to raw local FLAC.
 
-See [librespot maintainer restriction](https://github.com/librespot-org/librespot/issues/1583)
+See [librespot maintainer restriction](https://github.com/librespot-org/librespot/issues/1583#issuecomment-3499343020)
 and [SpotConnect maintainer's lossless response](https://github.com/philippe44/SpotConnect/issues/64#issuecomment-3798257485).
 The exact restriction permalink is recorded in the parent fork's upstream audit.
 
