@@ -22,5 +22,5 @@ struct AudioSelection {
   const char* reason = "NO_SUPPORTED_AUDIO_FILE";
 };
 AudioSelection selectAudioFile(const std::vector<int>& formats,
-                              QualityMode mode, int legacyPreferred = 1);
+                               QualityMode mode, int legacyPreferred = 1);
 }  // namespace cspot

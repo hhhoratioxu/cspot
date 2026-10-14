@@ -1,14 +1,14 @@
 #include "CDNAudioFile.h"
 
-#include <string.h>          // for memcpy
+#include <string.h>  // for memcpy
+#include <algorithm>
 #include <functional>        // for __base
 #include <initializer_list>  // for initializer_list
-#include <map>               // for operator!=, operator==
-#include <stdexcept>         // for runtime_error
-#include <string_view>       // for string_view
-#include <algorithm>
 #include <limits>
-#include <type_traits>       // for remove_extent_t
+#include <map>          // for operator!=, operator==
+#include <stdexcept>    // for runtime_error
+#include <string_view>  // for string_view
+#include <type_traits>  // for remove_extent_t
 
 #include "AccessKeyFetcher.h"  // for AccessKeyFetcher
 #include "BellLogger.h"        // for AbstractLogger
@@ -40,7 +40,8 @@ size_t CDNAudioFile::getPosition() {
 }
 
 void CDNAudioFile::seek(size_t newPos) {
-  if (newPos > totalFileSize) throw std::out_of_range("audio seek beyond end");
+  if (newPos > totalFileSize)
+    throw std::out_of_range("audio seek beyond end");
   this->enableRequestMargin = true;
   this->position = newPos;
 }
@@ -61,15 +62,18 @@ void CDNAudioFile::openStream() {
   if (httpConnection->contentLength() != header.size())
     throw std::runtime_error("CDN did not return the requested header range");
   this->httpConnection->stream().read((char*)header.data(), header.size());
-  if (httpConnection->stream().gcount() != static_cast<std::streamsize>(header.size()))
+  if (httpConnection->stream().gcount() !=
+      static_cast<std::streamsize>(header.size()))
     throw std::runtime_error("short CDN header read");
   this->totalFileSize = wireSize - SPOTIFY_OPUS_HEADER;
 
   this->decrypt(header.data(), header.size(), 0);
 
   // Location must be dividable by 16
-  size_t footerStartLocation = wireSize > static_cast<size_t>(OPUS_FOOTER_PREFFERED)
-      ? wireSize - OPUS_FOOTER_PREFFERED : 0;
+  size_t footerStartLocation =
+      wireSize > static_cast<size_t>(OPUS_FOOTER_PREFFERED)
+          ? wireSize - OPUS_FOOTER_PREFFERED
+          : 0;
   footerStartLocation -= footerStartLocation % 16;
 
   this->footer = std::vector<uint8_t>(
@@ -80,7 +84,8 @@ void CDNAudioFile::openStream() {
   this->httpConnection->stream().read((char*)footer.data(),
                                       this->footer.size());
   if (httpConnection->contentLength() != footer.size() ||
-      httpConnection->stream().gcount() != static_cast<std::streamsize>(footer.size()))
+      httpConnection->stream().gcount() !=
+          static_cast<std::streamsize>(footer.size()))
     throw std::runtime_error("short or invalid CDN footer range");
 
   this->decrypt(footer.data(), footer.size(), footerStartLocation);
@@ -151,12 +156,10 @@ size_t CDNAudioFile::readBytes(uint8_t* dst, size_t bytes) {
     size_t readCapacity = 0;
 
     try {
-      const size_t requestEnd = std::min(actualFileSize - 1,
-                                         requestPosition + HTTP_BUFFER_SIZE - 1);
-      this->httpConnection->get(
-          cdnUrl,
-          {bell::HTTPClient::RangeHeader::range(
-              requestPosition, requestEnd)});
+      const size_t requestEnd =
+          std::min(actualFileSize - 1, requestPosition + HTTP_BUFFER_SIZE - 1);
+      this->httpConnection->get(cdnUrl, {bell::HTTPClient::RangeHeader::range(
+                                            requestPosition, requestEnd)});
       readCapacity = this->httpConnection->contentLength();
       if (!readCapacity || readCapacity > httpBuffer.size() ||
           readCapacity > requestEnd - requestPosition + 1)

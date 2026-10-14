@@ -1,6 +1,6 @@
 #include "TrackQueue.h"
-#include "QualityPolicy.h"
 #include <pb_decode.h>
+#include "QualityPolicy.h"
 
 #include <algorithm>
 #include <functional>
@@ -223,7 +223,8 @@ void QueuedTrack::stepParseMetadata(Track* pbTrack, Episode* pbEpisode) {
     // Missing format or file ID must not default to enum zero (Vorbis 96).
     formats.push_back(selectedFiles[x].has_format && selectedFiles[x].file_id &&
                               selectedFiles[x].file_id->size == 20
-                          ? static_cast<int>(selectedFiles[x].format) : -1);
+                          ? static_cast<int>(selectedFiles[x].format)
+                          : -1);
   }
   const auto selected = selectAudioFile(formats, ctx->config.qualityMode,
                                         ctx->config.audioFormat);

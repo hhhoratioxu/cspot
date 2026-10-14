@@ -6,10 +6,10 @@
 #include "Crypto.h"
 #include "LoginBlob.h"
 #include "MercurySession.h"
+#include "QualityPolicy.h"
 #include "TimeProvider.h"
 #include "protobuf/authentication.pb.h"  // for AuthenticationType_AUTHE...
 #include "protobuf/metadata.pb.h"
-#include "QualityPolicy.h"
 #ifdef BELL_ONLY_CJSON
 #include "cJSON.h"
 #else

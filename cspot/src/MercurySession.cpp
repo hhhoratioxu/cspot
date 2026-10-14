@@ -128,7 +128,8 @@ void MercurySession::disconnect() {
 
   // make sure we have a connection or are not reconnecting
   std::unique_lock connlock(connectingMutex);
-  if (conn) conn->close();
+  if (conn)
+    conn->close();
   connlock.unlock();
 
   std::scoped_lock lock(this->isRunningMutex);
@@ -254,7 +255,8 @@ uint64_t MercurySession::executeSubscription(RequestType method,
 
   // make sure we are not reconnecting or stopped
   std::scoped_lock lock(connectingMutex);
-  if (!isRunning) return 0;
+  if (!isRunning)
+    return 0;
 
   CSPOT_LOG(debug, "Executing Mercury Request, type %s",
             RequestTypeMap[method].c_str());
@@ -331,8 +333,9 @@ uint32_t MercurySession::requestAudioKey(const std::vector<uint8_t>& trackId,
 
   // make sure we are not reconnecting or stopped
   std::scoped_lock lock(connectingMutex);
-  if (!isRunning) return 0;
-  
+  if (!isRunning)
+    return 0;
+
   // Store callback
   this->audioKeyCallbacks.insert({this->audioKeySequence, audioCallback});
 

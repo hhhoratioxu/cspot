@@ -184,7 +184,7 @@ void TrackPlayer::runTask() {
         currentSongPlaying = false;
         continue;
       }
-     
+
       if (pendingReset || !currentSongPlaying) {
         continue;
       }
@@ -198,19 +198,23 @@ void TrackPlayer::runTask() {
         continue;
       }
       const auto* info = ov_info(&vorbisFile, -1);
-      if (!info || (ctx->config.requiredPcmSampleRate &&
-                    info->rate != ctx->config.requiredPcmSampleRate) ||
+      if (!info ||
+          (ctx->config.requiredPcmSampleRate &&
+           info->rate != ctx->config.requiredPcmSampleRate) ||
           (ctx->config.requiredPcmChannels &&
-                    info->channels != ctx->config.requiredPcmChannels)) {
+           info->channels != ctx->config.requiredPcmChannels)) {
         CSPOT_LOG(error, "PCM_FORMAT_UNSUPPORTED_BY_SINK");
         ov_clear(&vorbisFile);
         currentSongPlaying = false;
         currentTrackStream = nullptr;
         continue;
       }
-      CSPOT_LOG(info, "AUDIO_SOURCE codec=%s sample_rate=%ld channels=%d "
-                "source_bit_depth=not_applicable decoded_pcm_bits=16 lossless=0",
-                audioFormatName(track->selectedAudioFormat), info->rate, info->channels);
+      CSPOT_LOG(
+          info,
+          "AUDIO_SOURCE codec=%s sample_rate=%ld channels=%d "
+          "source_bit_depth=not_applicable decoded_pcm_bits=16 lossless=0",
+          audioFormatName(track->selectedAudioFormat), info->rate,
+          info->channels);
       if (trackOffset == 0) {
         this->trackLoaded(track, startPaused);
         startPaused = false;
@@ -309,7 +313,8 @@ size_t TrackPlayer::_vorbisRead(void* ptr, size_t size, size_t nmemb) {
       nmemb > std::numeric_limits<size_t>::max() / size) {
     return 0;
   }
-  return this->currentTrackStream->readBytes((uint8_t*)ptr, nmemb * size) / size;
+  return this->currentTrackStream->readBytes((uint8_t*)ptr, nmemb * size) /
+         size;
 }
 
 size_t TrackPlayer::_vorbisClose() {
@@ -322,10 +327,14 @@ int TrackPlayer::_vorbisSeek(int64_t offset, int whence) {
   }
   const auto total = static_cast<int64_t>(currentTrackStream->getSize());
   int64_t base = 0;
-  if (whence == SEEK_CUR) base = currentTrackStream->getPosition();
-  else if (whence == SEEK_END) base = total;
-  else if (whence != SEEK_SET) return -1;
-  if (offset < -base || offset > total - base) return -1;
+  if (whence == SEEK_CUR)
+    base = currentTrackStream->getPosition();
+  else if (whence == SEEK_END)
+    base = total;
+  else if (whence != SEEK_SET)
+    return -1;
+  if (offset < -base || offset > total - base)
+    return -1;
   currentTrackStream->seek(static_cast<size_t>(base + offset));
   return 0;
 }

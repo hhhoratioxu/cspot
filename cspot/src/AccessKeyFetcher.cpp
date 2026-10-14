@@ -58,9 +58,12 @@ std::string AccessKeyFetcher::getAccessKey() {
 
 void AccessKeyFetcher::updateAccessKey() {
   if (ctx->config.clientId.empty() || ctx->config.clientSecret.empty() ||
-      ctx->config.clientId.front() == '<' || ctx->config.clientSecret.front() == '<') {
+      ctx->config.clientId.front() == '<' ||
+      ctx->config.clientSecret.front() == '<') {
     if (!credentialsErrorReported.exchange(true))
-      CSPOT_LOG(error, "SPOTIFY_CLIENT_CREDENTIALS_REQUIRED: configure your own Client ID and Secret privately; no token request was sent");
+      CSPOT_LOG(error,
+                "SPOTIFY_CLIENT_CREDENTIALS_REQUIRED: configure your own "
+                "Client ID and Secret privately; no token request was sent");
     return;
   }
   if (keyPending) {
@@ -87,36 +90,38 @@ void AccessKeyFetcher::updateAccessKey() {
     std::vector<uint8_t> body(credentials.begin(), credentials.end());
 
     try {
-    auto response = bell::HTTPClient::post(
-        "https://accounts.spotify.com/api/token",
-        {{"Content-Type", "application/x-www-form-urlencoded"}}, body);
+      auto response = bell::HTTPClient::post(
+          "https://accounts.spotify.com/api/token",
+          {{"Content-Type", "application/x-www-form-urlencoded"}}, body);
 
 #ifdef BELL_ONLY_CJSON
-    cJSON* root = cJSON_ParseWithLength(response->body().data(), response->body().size());
-    if (!cJSON_GetObjectItem(root, "error")) {
-      accessKey =
-          std::string(cJSON_GetObjectItem(root, "access_token")->valuestring);
-      int expiresIn = cJSON_GetObjectItem(root, "expires_in")->valueint;
-      cJSON_Delete(root);
+      cJSON* root = cJSON_ParseWithLength(response->body().data(),
+                                          response->body().size());
+      if (!cJSON_GetObjectItem(root, "error")) {
+        accessKey =
+            std::string(cJSON_GetObjectItem(root, "access_token")->valuestring);
+        int expiresIn = cJSON_GetObjectItem(root, "expires_in")->valueint;
+        cJSON_Delete(root);
 #else
-    auto root = nlohmann::json::parse(response->bytes());
-    if (!root.contains("error")) {
-      accessKey = std::string(root["access_token"]);
-      int expiresIn = root["expires_in"];
+      auto root = nlohmann::json::parse(response->bytes());
+      if (!root.contains("error")) {
+        accessKey = std::string(root["access_token"]);
+        int expiresIn = root["expires_in"];
 #endif
-      // Successfully received an auth token
-      CSPOT_LOG(info, "Access token sucessfully fetched");
-      success = true;
+        // Successfully received an auth token
+        CSPOT_LOG(info, "Access token sucessfully fetched");
+        success = true;
 
-      this->expiresAt =
-          ctx->timeProvider->getSyncedTimestamp() + (expiresIn * 1000);
-    } else {
-      CSPOT_LOG(error, "Failed to fetch access token");
-      BELL_SLEEP_MS(3000);
-    }
+        this->expiresAt =
+            ctx->timeProvider->getSyncedTimestamp() + (expiresIn * 1000);
+      } else {
+        CSPOT_LOG(error, "Failed to fetch access token");
+        BELL_SLEEP_MS(3000);
+      }
     } catch (const std::exception&) {
       // Never print request content, credentials or token response bodies.
-      CSPOT_LOG(error, "SPOTIFY_TOKEN_REQUEST_FAILED (network or response error)");
+      CSPOT_LOG(error,
+                "SPOTIFY_TOKEN_REQUEST_FAILED (network or response error)");
       BELL_SLEEP_MS(3000);
     }
 
