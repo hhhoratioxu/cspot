@@ -1,0 +1,42 @@
+name: Hori cspot local audio
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/spotify-lossless]
+    paths:
+      - cspot/audio/**
+      - cspot/src/QualityPolicy.cpp
+      - cspot/include/QualityPolicy.h
+      - tests/audio/**
+      - tools/audio-probe.cpp
+      - .github/workflows/hori-audio.yml
+permissions:
+  contents: read
+jobs:
+  audio:
+    if: github.repository == 'hhhoratioxu/cspot'
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Native build dependencies
+        run: brew install cmake ninja flac
+      - name: Original FLAC fixtures and PCM verification
+        run: |
+          cmake -S tests/audio -B build-audio -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+          cmake --build build-audio --parallel 3
+          ctest --test-dir build-audio --output-on-failure --no-tests=error --output-junit build-audio/tests.xml
+      - name: Address and UB checks
+        run: |
+          cmake -S tests/audio -B build-audio-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DHORI_SANITIZE=ON -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+          cmake --build build-audio-asan --parallel 3
+          ctest --test-dir build-audio-asan --output-on-failure --no-tests=error --output-junit build-audio-asan/tests.xml
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Hori-cspot-local-audio-arm64
+          path: |
+            build-audio/hori-audio-probe
+            build-audio/tests.xml
+            build-audio-asan/tests.xml
