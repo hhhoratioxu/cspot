@@ -5,6 +5,7 @@
 #include <ctime>        // for size_t, time
 #include <functional>   // for function
 #include <memory>       // for shared_ptr, unique_ptr
+#include <limits>
 #include <mutex>        // for mutex
 #include <string_view>  // for string_view
 #include <vector>       // for vector
@@ -88,7 +89,8 @@ class TrackPlayer : bell::Task {
   std::atomic<bool> isRunning = false;
   std::atomic<bool> pendingReset = false;
   std::atomic<bool> inFuture = false;
-  std::atomic<size_t> pendingSeekPositionMs = 0;
+  static constexpr size_t NO_SEEK = std::numeric_limits<size_t>::max();
+  std::atomic<size_t> pendingSeekPositionMs = NO_SEEK;
   std::atomic<bool> startPaused = false;
 
   std::mutex runningMutex;

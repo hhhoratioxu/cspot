@@ -1,4 +1,5 @@
 #include "TrackPlayer.h"
+#include "CSpotContext.h"
 
 #include <mutex>        // for mutex, scoped_lock
 #include <string>       // for string
@@ -188,20 +189,46 @@ void TrackPlayer::runTask() {
         continue;
       }
 
-      if (trackOffset == 0 && pendingSeekPositionMs == 0) {
+      int32_t r =
+          ov_open_callbacks(this, &vorbisFile, NULL, 0, vorbisCallbacks);
+      if (r != 0) {
+        CSPOT_LOG(error, "VORBIS_OPEN_FAILED code=%d", r);
+        currentSongPlaying = false;
+        currentTrackStream = nullptr;
+        continue;
+      }
+      const auto* info = ov_info(&vorbisFile, -1);
+      if (!info || (ctx->config.requiredPcmSampleRate &&
+                    info->rate != ctx->config.requiredPcmSampleRate) ||
+          (ctx->config.requiredPcmChannels &&
+                    info->channels != ctx->config.requiredPcmChannels)) {
+        CSPOT_LOG(error, "PCM_FORMAT_UNSUPPORTED_BY_SINK");
+        ov_clear(&vorbisFile);
+        currentSongPlaying = false;
+        currentTrackStream = nullptr;
+        continue;
+      }
+      CSPOT_LOG(info, "AUDIO_SOURCE codec=%s sample_rate=%ld channels=%d "
+                "source_bit_depth=not_applicable decoded_pcm_bits=16 lossless=0",
+                audioFormatName(track->selectedAudioFormat), info->rate, info->channels);
+      if (trackOffset == 0) {
         this->trackLoaded(track, startPaused);
         startPaused = false;
       }
 
-      int32_t r =
-          ov_open_callbacks(this, &vorbisFile, NULL, 0, vorbisCallbacks);
-
-      if (pendingSeekPositionMs > 0) {
-        track->requestedPosition = pendingSeekPositionMs;
+      const auto initialSeek = pendingSeekPositionMs.exchange(NO_SEEK);
+      if (initialSeek != NO_SEEK) {
+        track->requestedPosition = initialSeek;
       }
 
       if (track->requestedPosition > 0) {
-        VORBIS_SEEK(&vorbisFile, track->requestedPosition);
+        if (VORBIS_SEEK(&vorbisFile, track->requestedPosition) != 0) {
+          CSPOT_LOG(error, "VORBIS_INITIAL_SEEK_FAILED");
+          ov_clear(&vorbisFile);
+          currentSongPlaying = false;
+          currentTrackStream = nullptr;
+          continue;
+        }
       }
 
       eof = false;
@@ -211,14 +238,13 @@ void TrackPlayer::runTask() {
 
       while (!eof && currentSongPlaying) {
         // Execute seek if needed
-        if (pendingSeekPositionMs > 0) {
-          uint32_t seekPosition = pendingSeekPositionMs;
-
-          // Reset the pending seek position
-          pendingSeekPositionMs = 0;
-
-          // Seek to the new position
-          VORBIS_SEEK(&vorbisFile, seekPosition);
+        const auto seekPosition = pendingSeekPositionMs.exchange(NO_SEEK);
+        if (seekPosition != NO_SEEK) {
+          if (VORBIS_SEEK(&vorbisFile, seekPosition) != 0) {
+            CSPOT_LOG(error, "VORBIS_SEEK_FAILED");
+            currentSongPlaying = false;
+            break;
+          }
         }
 
         long ret = VORBIS_READ(&vorbisFile, (char*)&pcmBuffer[0],
@@ -229,14 +255,14 @@ void TrackPlayer::runTask() {
           // and done :)
           eof = true;
         } else if (ret < 0) {
-          CSPOT_LOG(error, "An error has occured in the stream %d", ret);
+          CSPOT_LOG(error, "An error has occured in the stream %ld", ret);
           currentSongPlaying = false;
         } else {
           if (this->dataCallback != nullptr) {
             auto toWrite = ret;
 
             while (!eof && currentSongPlaying && !pendingReset && toWrite > 0) {
-              int written = 0;
+              size_t written = 0;
               {
                 std::scoped_lock dataOutLock(dataOutMutex);
                 // If reset happened during playback, return
@@ -245,6 +271,11 @@ void TrackPlayer::runTask() {
 
                 written = dataCallback(pcmBuffer.data() + (ret - toWrite),
                                        toWrite, track->identifier);
+              }
+              if (written > static_cast<size_t>(toWrite)) {
+                CSPOT_LOG(error, "PCM_CALLBACK_INVALID_WRITE_COUNT");
+                currentSongPlaying = false;
+                break;
               }
               if (written == 0) {
                 BELL_SLEEP_MS(50);
@@ -274,10 +305,11 @@ void TrackPlayer::runTask() {
 }
 
 size_t TrackPlayer::_vorbisRead(void* ptr, size_t size, size_t nmemb) {
-  if (this->currentTrackStream == nullptr) {
+  if (this->currentTrackStream == nullptr || size == 0 ||
+      nmemb > std::numeric_limits<size_t>::max() / size) {
     return 0;
   }
-  return this->currentTrackStream->readBytes((uint8_t*)ptr, nmemb * size);
+  return this->currentTrackStream->readBytes((uint8_t*)ptr, nmemb * size) / size;
 }
 
 size_t TrackPlayer::_vorbisClose() {
@@ -286,22 +318,15 @@ size_t TrackPlayer::_vorbisClose() {
 
 int TrackPlayer::_vorbisSeek(int64_t offset, int whence) {
   if (this->currentTrackStream == nullptr) {
-    return 0;
+    return -1;
   }
-  switch (whence) {
-    case 0:
-      this->currentTrackStream->seek(offset);  // Spotify header offset
-      break;
-    case 1:
-      this->currentTrackStream->seek(this->currentTrackStream->getPosition() +
-                                     offset);
-      break;
-    case 2:
-      this->currentTrackStream->seek(this->currentTrackStream->getSize() +
-                                     offset);
-      break;
-  }
-
+  const auto total = static_cast<int64_t>(currentTrackStream->getSize());
+  int64_t base = 0;
+  if (whence == SEEK_CUR) base = currentTrackStream->getPosition();
+  else if (whence == SEEK_END) base = total;
+  else if (whence != SEEK_SET) return -1;
+  if (offset < -base || offset > total - base) return -1;
+  currentTrackStream->seek(static_cast<size_t>(base + offset));
   return 0;
 }
 

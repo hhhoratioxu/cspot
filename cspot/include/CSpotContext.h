@@ -9,6 +9,7 @@
 #include "TimeProvider.h"
 #include "protobuf/authentication.pb.h"  // for AuthenticationType_AUTHE...
 #include "protobuf/metadata.pb.h"
+#include "QualityPolicy.h"
 #ifdef BELL_ONLY_CJSON
 #include "cJSON.h"
 #else
@@ -22,6 +23,10 @@ struct Context {
   struct ConfigState {
     // Setup default bitrate to 160
     AudioFormat audioFormat = AudioFormat::AudioFormat_OGG_VORBIS_160;
+    QualityMode qualityMode = QualityMode::Legacy;
+    // Zero allows arbitrary Vorbis PCM format for existing generic callers.
+    unsigned requiredPcmSampleRate = 0;
+    unsigned requiredPcmChannels = 0;
     std::string deviceId;
     std::string deviceName;
     std::string clientId;

@@ -57,12 +57,22 @@ std::string AccessKeyFetcher::getAccessKey() {
 }
 
 void AccessKeyFetcher::updateAccessKey() {
+  if (ctx->config.clientId.empty() || ctx->config.clientSecret.empty() ||
+      ctx->config.clientId.front() == '<' || ctx->config.clientSecret.front() == '<') {
+    if (!credentialsErrorReported.exchange(true))
+      CSPOT_LOG(error, "SPOTIFY_CLIENT_CREDENTIALS_REQUIRED: configure your own Client ID and Secret privately; no token request was sent");
+    return;
+  }
   if (keyPending) {
     // Already pending refresh request
     return;
   }
 
   keyPending = true;
+  struct PendingGuard {
+    std::atomic<bool>& flag;
+    ~PendingGuard() { flag = false; }
+  } pendingGuard{keyPending};
 
   // Max retry of 3, can receive different hash cat types
   int retryCount = 3;
@@ -76,6 +86,7 @@ void AccessKeyFetcher::updateAccessKey() {
         "&client_secret=" + ctx->config.clientSecret;
     std::vector<uint8_t> body(credentials.begin(), credentials.end());
 
+    try {
     auto response = bell::HTTPClient::post(
         "https://accounts.spotify.com/api/token",
         {{"Content-Type", "application/x-www-form-urlencoded"}}, body);
@@ -101,6 +112,11 @@ void AccessKeyFetcher::updateAccessKey() {
           ctx->timeProvider->getSyncedTimestamp() + (expiresIn * 1000);
     } else {
       CSPOT_LOG(error, "Failed to fetch access token");
+      BELL_SLEEP_MS(3000);
+    }
+    } catch (const std::exception&) {
+      // Never print request content, credentials or token response bodies.
+      CSPOT_LOG(error, "SPOTIFY_TOKEN_REQUEST_FAILED (network or response error)");
       BELL_SLEEP_MS(3000);
     }
 

@@ -52,6 +52,7 @@ class QueuedTrack {
   State state = State::QUEUED;  // Current state of the track
   TrackReference ref;           // Holds GID, URI and Context
   TrackInfo trackInfo;  // Full track information fetched from spotify, name etc
+  int selectedAudioFormat = -1;  // Actual metadata format of the selected file
 
   uint32_t requestedPosition;
   std::string identifier;

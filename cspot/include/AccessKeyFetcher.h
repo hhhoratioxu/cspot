@@ -35,6 +35,7 @@ class AccessKeyFetcher {
 
   std::atomic<bool> keyPending = false;
   std::string accessKey;
-  long long int expiresAt;
+  long long int expiresAt = 0;
+  std::atomic<bool> credentialsErrorReported = false;
 };
 }  // namespace cspot

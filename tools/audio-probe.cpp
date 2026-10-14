@@ -3,6 +3,7 @@
 #include "RaopPcmReader.h"
 #include <charconv>
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -29,6 +30,8 @@ int main(int argc, char** argv) {
     }
     if (file.empty()) throw std::invalid_argument("missing FLAC file; use --help");
     if (!output.empty() && output == file) throw std::invalid_argument("output must differ from input");
+    if (!output.empty() && std::filesystem::exists(output))
+      throw std::invalid_argument("output already exists; choose a new file");
     cspot::audio::FlacDecoder decoder(file);
     cspot::audio::RaopPcmReader reader(decoder);
     if (seek) reader.seekMs(seek);

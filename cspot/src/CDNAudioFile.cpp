@@ -6,6 +6,8 @@
 #include <map>               // for operator!=, operator==
 #include <stdexcept>         // for runtime_error
 #include <string_view>       // for string_view
+#include <algorithm>
+#include <limits>
 #include <type_traits>       // for remove_extent_t
 
 #include "AccessKeyFetcher.h"  // for AccessKeyFetcher
@@ -29,6 +31,8 @@ CDNAudioFile::CDNAudioFile(const std::string& cdnUrl,
                            const std::vector<uint8_t>& audioKey)
     : cdnUrl(cdnUrl), audioKey(audioKey) {
   this->crypto = std::make_unique<Crypto>();
+  if (audioKey.size() != 16)
+    throw std::invalid_argument("Spotify Vorbis audio key must be 16 bytes");
 }
 
 size_t CDNAudioFile::getPosition() {
@@ -36,28 +40,37 @@ size_t CDNAudioFile::getPosition() {
 }
 
 void CDNAudioFile::seek(size_t newPos) {
+  if (newPos > totalFileSize) throw std::out_of_range("audio seek beyond end");
   this->enableRequestMargin = true;
   this->position = newPos;
 }
 
 void CDNAudioFile::openStream() {
-  CSPOT_LOG(info, "Opening HTTP stream to %s", this->cdnUrl.c_str());
+  CSPOT_LOG(info, "Opening CDN HTTP stream (signed URL redacted)");
 
   // Open connection, read first 128 bytes
   this->httpConnection = bell::HTTPClient::get(
       this->cdnUrl,
       {bell::HTTPClient::RangeHeader::range(0, OPUS_HEADER_SIZE - 1)});
 
-  this->httpConnection->stream().read((char*)header.data(), OPUS_HEADER_SIZE);
-  this->totalFileSize =
-      this->httpConnection->totalLength() - SPOTIFY_OPUS_HEADER;
+  const auto wireSize = httpConnection->totalLength();
+  if (wireSize <= static_cast<size_t>(SPOTIFY_OPUS_HEADER) ||
+      wireSize > static_cast<size_t>(std::numeric_limits<int32_t>::max()))
+    throw std::runtime_error("invalid Spotify Vorbis stream size");
+  header.resize(std::min(wireSize, static_cast<size_t>(OPUS_HEADER_SIZE)));
+  if (httpConnection->contentLength() != header.size())
+    throw std::runtime_error("CDN did not return the requested header range");
+  this->httpConnection->stream().read((char*)header.data(), header.size());
+  if (httpConnection->stream().gcount() != static_cast<std::streamsize>(header.size()))
+    throw std::runtime_error("short CDN header read");
+  this->totalFileSize = wireSize - SPOTIFY_OPUS_HEADER;
 
-  this->decrypt(header.data(), OPUS_HEADER_SIZE, 0);
+  this->decrypt(header.data(), header.size(), 0);
 
   // Location must be dividable by 16
-  size_t footerStartLocation =
-      (this->totalFileSize - OPUS_FOOTER_PREFFERED + SPOTIFY_OPUS_HEADER) -
-      (this->totalFileSize - OPUS_FOOTER_PREFFERED + SPOTIFY_OPUS_HEADER) % 16;
+  size_t footerStartLocation = wireSize > static_cast<size_t>(OPUS_FOOTER_PREFFERED)
+      ? wireSize - OPUS_FOOTER_PREFFERED : 0;
+  footerStartLocation -= footerStartLocation % 16;
 
   this->footer = std::vector<uint8_t>(
       this->totalFileSize - footerStartLocation + SPOTIFY_OPUS_HEADER);
@@ -66,6 +79,9 @@ void CDNAudioFile::openStream() {
 
   this->httpConnection->stream().read((char*)footer.data(),
                                       this->footer.size());
+  if (httpConnection->contentLength() != footer.size() ||
+      httpConnection->stream().gcount() != static_cast<std::streamsize>(footer.size()))
+    throw std::runtime_error("short or invalid CDN footer range");
 
   this->decrypt(footer.data(), footer.size(), footerStartLocation);
   CSPOT_LOG(info, "Header and footer bytes received");
@@ -78,13 +94,14 @@ size_t CDNAudioFile::readBytes(uint8_t* dst, size_t bytes) {
   size_t offsetPosition = position + SPOTIFY_OPUS_HEADER;
   size_t actualFileSize = this->totalFileSize + SPOTIFY_OPUS_HEADER;
 
-  if (position + bytes >= this->totalFileSize) {
+  if (position >= this->totalFileSize || bytes == 0) {
     return 0;
   }
+  bytes = std::min(bytes, totalFileSize - position);
 
   // // Opus tries to read header, use prefetched data
-  if (offsetPosition < OPUS_HEADER_SIZE &&
-      bytes + offsetPosition <= OPUS_HEADER_SIZE) {
+  if (offsetPosition < header.size() &&
+      bytes + offsetPosition <= header.size()) {
     memcpy(dst, this->header.data() + offsetPosition, bytes);
     position += bytes;
     return bytes;
@@ -134,11 +151,16 @@ size_t CDNAudioFile::readBytes(uint8_t* dst, size_t bytes) {
     size_t readCapacity = 0;
 
     try {
+      const size_t requestEnd = std::min(actualFileSize - 1,
+                                         requestPosition + HTTP_BUFFER_SIZE - 1);
       this->httpConnection->get(
           cdnUrl,
           {bell::HTTPClient::RangeHeader::range(
-              requestPosition, requestPosition + HTTP_BUFFER_SIZE - 1)});
+              requestPosition, requestEnd)});
       readCapacity = this->httpConnection->contentLength();
+      if (!readCapacity || readCapacity > httpBuffer.size() ||
+          readCapacity > requestEnd - requestPosition + 1)
+        throw std::runtime_error("CDN audio chunk exceeds the bounded request");
 
       this->httpConnection->stream().read((char*)this->httpBuffer.data(),
                                           readCapacity);

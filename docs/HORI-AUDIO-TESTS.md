@@ -36,7 +36,7 @@ The standalone local decoder deliberately does not implement Spotify DRM or file
 retrieval. CDNAudioFile remains the existing Spotify Vorbis transport, whose 167-byte
 prefix must not be applied to raw local FLAC.
 
-See [librespot maintainer restriction](https://github.com/librespot-org/librespot/issues/1583#issuecomment-3499179046)
+See [librespot maintainer restriction](https://github.com/librespot-org/librespot/issues/1583)
 and [SpotConnect maintainer's lossless response](https://github.com/philippe44/SpotConnect/issues/64#issuecomment-3798257485).
 The exact restriction permalink is recorded in the parent fork's upstream audit.
 

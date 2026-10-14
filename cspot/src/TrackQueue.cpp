@@ -1,4 +1,5 @@
 #include "TrackQueue.h"
+#include "QualityPolicy.h"
 #include <pb_decode.h>
 
 #include <algorithm>
@@ -217,19 +218,26 @@ void QueuedTrack::stepParseMetadata(Track* pbTrack, Episode* pbEpisode) {
     }
   }
 
-  // Find playable file
-  for (int x = 0; x < filesCount; x++) {
-    CSPOT_LOG(debug, "File format: %d", selectedFiles[x].format);
-    if (selectedFiles[x].format == ctx->config.audioFormat) {
-      fileId = pbArrayToVector(selectedFiles[x].file_id);
-      break;  // If file found stop searching
-    }
-
-    // Fallback to OGG Vorbis 96kbps
-    if (fileId.size() == 0 &&
-        selectedFiles[x].format == AudioFormat_OGG_VORBIS_96) {
-      fileId = pbArrayToVector(selectedFiles[x].file_id);
-    }
+  std::vector<int> formats;
+  for (int x = 0; x < filesCount; ++x) {
+    // Missing format or file ID must not default to enum zero (Vorbis 96).
+    formats.push_back(selectedFiles[x].has_format && selectedFiles[x].file_id &&
+                              selectedFiles[x].file_id->size == 20
+                          ? static_cast<int>(selectedFiles[x].format) : -1);
+  }
+  const auto selected = selectAudioFile(formats, ctx->config.qualityMode,
+                                        ctx->config.audioFormat);
+  fileId.clear();
+  selectedAudioFormat = selected.format;
+  if (selected.index >= 0) {
+    fileId = pbArrayToVector(selectedFiles[selected.index].file_id);
+    CSPOT_LOG(info, "AUDIO_SELECTION mode=%s source=%s fallback=%d reason=%s",
+              qualityModeName(ctx->config.qualityMode),
+              audioFormatName(selectedAudioFormat), selected.fallback,
+              selected.reason);
+  } else {
+    CSPOT_LOG(error, "AUDIO_SELECTION mode=%s error=%s",
+              qualityModeName(ctx->config.qualityMode), selected.reason);
   }
 
   // No viable files found for playback
@@ -258,7 +266,7 @@ void QueuedTrack::stepLoadAudioFile(
           bool success, const std::vector<uint8_t>& audioKey) {
         std::scoped_lock lock(trackListMutex);
 
-        if (success) {
+        if (success && audioKey.size() == 20) {
           CSPOT_LOG(info, "Got audio key");
           this->audioKey =
               std::vector<uint8_t>(audioKey.begin() + 4, audioKey.end());
@@ -308,7 +316,7 @@ void QueuedTrack::stepLoadCDNUrl(const std::string& accessKey) {
     cdnUrl = jsonResult["cdnurl"][0];
 #endif
 
-    CSPOT_LOG(info, "Received CDN URL, %s", cdnUrl.c_str());
+    CSPOT_LOG(info, "Received CDN URL (signed URL redacted)");
     state = State::READY;
     loadedSemaphore->give();
   } catch (...) {
